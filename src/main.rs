@@ -137,7 +137,10 @@ fn main() {
             // Log height map to rerun as depth image
             let depth_data: Vec<f32> = height_map
                 .iter()
-                .flat_map(|row| row.iter().map(|&h| if h.is_nan() { f32::NAN } else { h as f32 }))
+                .flat_map(|row| {
+                    row.iter()
+                        .map(|&h| if h.is_nan() { f32::NAN } else { h as f32 })
+                })
                 .collect();
             recording_stream
                 .log(

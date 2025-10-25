@@ -139,7 +139,7 @@ pub fn grad_map_to_height_field(
     let y_range = max_y - min_y;
 
     let mut height_field = vec![vec![f64::NAN; width]; height];
-    
+
     // Calculate a reasonable threshold for "unknown" pixels
     // Use a fraction of the image diagonal as the max distance
     let img_diagonal = ((x_range * x_range + y_range * y_range).sqrt() / 20.0).max(0.1);
@@ -211,7 +211,7 @@ pub fn grad_map_to_image(
     let y_range = max_y - min_y;
 
     let mut image = vec![vec![[255u8, 255u8, 255u8]; width]; height];
-    
+
     // Calculate a reasonable threshold for "unknown" pixels
     // Use a fraction of the image diagonal as the max distance
     let img_diagonal = ((x_range * x_range + y_range * y_range).sqrt() / 20.0).max(0.1);
