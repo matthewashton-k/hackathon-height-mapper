@@ -76,38 +76,74 @@ pub fn grad_map_to_rerun_points3d(map: &Vec<GradientAtPoint>) -> Points3D {
 }
 
 fn gradient_to_color(gradient: f64) -> [u8; 3] {
-    let clamped = gradient.min(2.0).max(0.0);
+    let clamped = gradient.min(3.0).max(0.0);
 
-    if clamped < 0.5 {
-        let t = clamped / 0.5;
-        [(255.0 * t) as u8, 255, 0]
+    if clamped < 0.3 {
+        let t = clamped / 0.3;
+        [0, (100.0 + 155.0 * t) as u8, (100.0 + 55.0 * t) as u8]
+    } else if clamped < 0.5 {
+        let t = (clamped - 0.3) / 0.2;
+        [(180.0 * t) as u8, 255, (155.0 - 55.0 * t) as u8]
+    } else if clamped < 0.7 {
+        let t = (clamped - 0.5) / 0.2;
+        [(180.0 + 75.0 * t) as u8, 255, (100.0 - 100.0 * t) as u8]
     } else if clamped < 1.0 {
-        let t = (clamped - 0.5) / 0.5;
-        [255, (255.0 * (1.0 - t * 0.5)) as u8, 0]
+        let t = (clamped - 0.7) / 0.3;
+        [255, (255.0 - 90.0 * t) as u8, 0]
+    } else if clamped < 1.5 {
+        // Orange to red-orange (1.0-1.5)
+        let t = (clamped - 1.0) / 0.5;
+        [255, (165.0 - 90.0 * t) as u8, 0]
+    } else if clamped < 2.0 {
+        // Red-orange to red (1.5-2.0)
+        let t = (clamped - 1.5) / 0.5;
+        [255, (75.0 - 75.0 * t) as u8, 0]
     } else {
-        let t = (clamped - 1.0) / 1.0;
-        [255, (128.0 * (1.0 - t)) as u8, 0]
+        // Red to dark red (2.0-3.0)
+        let t = ((clamped - 2.0) / 1.0).min(1.0);
+        [(255.0 - 100.0 * t) as u8, 0, 0]
     }
 }
 
 /// Return an image where each pixel is at the height of the nearest point in the gradient map
-/// The function creates a 2D grid and assigns each pixel the height (z-coordinate) of the 
+/// The function creates a 2D grid and assigns each pixel the height (z-coordinate) of the
 /// closest point from the gradient map
-pub fn grad_map_to_height_field(map: &Vec<GradientAtPoint>, width: usize, height: usize) -> Vec<Vec<f64>> {
+pub fn grad_map_to_height_field(
+    map: &Vec<GradientAtPoint>,
+    width: usize,
+    height: usize,
+) -> Vec<Vec<f64>> {
     if map.is_empty() {
         return vec![vec![0.0; width]; height];
     }
 
     // Find bounds of the point cloud
-    let min_x = map.iter().map(|g| g.location.x).fold(f64::INFINITY, f64::min);
-    let max_x = map.iter().map(|g| g.location.x).fold(f64::NEG_INFINITY, f64::max);
-    let min_y = map.iter().map(|g| g.location.y).fold(f64::INFINITY, f64::min);
-    let max_y = map.iter().map(|g| g.location.y).fold(f64::NEG_INFINITY, f64::max);
+    let min_x = map
+        .iter()
+        .map(|g| g.location.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = map
+        .iter()
+        .map(|g| g.location.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = map
+        .iter()
+        .map(|g| g.location.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = map
+        .iter()
+        .map(|g| g.location.y)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     let x_range = max_x - min_x;
     let y_range = max_y - min_y;
 
-    let mut height_field = vec![vec![0.0; width]; height];
+    let mut height_field = vec![vec![f64::NAN; width]; height];
+    
+    // Calculate a reasonable threshold for "unknown" pixels
+    // Use a fraction of the image diagonal as the max distance
+    let img_diagonal = ((x_range * x_range + y_range * y_range).sqrt() / 20.0).max(0.1);
+    let max_dist_sq = img_diagonal * img_diagonal;
 
     // For each pixel, find the nearest point and use its z value
     for row in 0..height {
@@ -131,7 +167,10 @@ pub fn grad_map_to_height_field(map: &Vec<GradientAtPoint>, width: usize, height
                 }
             }
 
-            height_field[row][col] = nearest_z;
+            // Only assign height if the nearest point is close enough
+            if min_dist < max_dist_sq {
+                height_field[row][col] = nearest_z;
+            }
         }
     }
 
@@ -141,21 +180,42 @@ pub fn grad_map_to_height_field(map: &Vec<GradientAtPoint>, width: usize, height
 /// Convert a gradient map to an RGB image where pixels are colored based on slope:
 /// - Green (low slope) to Red (high slope)
 /// Uses the existing gradient_to_color function for consistent color mapping
-pub fn grad_map_to_image(map: &Vec<GradientAtPoint>, width: usize, height: usize) -> Vec<Vec<[u8; 3]>> {
+pub fn grad_map_to_image(
+    map: &Vec<GradientAtPoint>,
+    width: usize,
+    height: usize,
+) -> Vec<Vec<[u8; 3]>> {
     if map.is_empty() {
         return vec![vec![[0, 255, 0]; width]; height];
     }
 
     // Find bounds of the point cloud
-    let min_x = map.iter().map(|g| g.location.x).fold(f64::INFINITY, f64::min);
-    let max_x = map.iter().map(|g| g.location.x).fold(f64::NEG_INFINITY, f64::max);
-    let min_y = map.iter().map(|g| g.location.y).fold(f64::INFINITY, f64::min);
-    let max_y = map.iter().map(|g| g.location.y).fold(f64::NEG_INFINITY, f64::max);
+    let min_x = map
+        .iter()
+        .map(|g| g.location.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = map
+        .iter()
+        .map(|g| g.location.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = map
+        .iter()
+        .map(|g| g.location.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = map
+        .iter()
+        .map(|g| g.location.y)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     let x_range = max_x - min_x;
     let y_range = max_y - min_y;
 
-    let mut image = vec![vec![[0u8, 255u8, 0u8]; width]; height];
+    let mut image = vec![vec![[255u8, 255u8, 255u8]; width]; height];
+    
+    // Calculate a reasonable threshold for "unknown" pixels
+    // Use a fraction of the image diagonal as the max distance
+    let img_diagonal = ((x_range * x_range + y_range * y_range).sqrt() / 20.0).max(0.1);
+    let max_dist_sq = img_diagonal * img_diagonal;
 
     // For each pixel, find the nearest point and use its gradient for coloring
     for row in 0..height {
@@ -179,7 +239,11 @@ pub fn grad_map_to_image(map: &Vec<GradientAtPoint>, width: usize, height: usize
                 }
             }
 
-            image[row][col] = gradient_to_color(nearest_gradient);
+            // Only color the pixel if the nearest point is close enough
+            // Otherwise leave it white (unknown)
+            if min_dist < max_dist_sq {
+                image[row][col] = gradient_to_color(nearest_gradient);
+            }
         }
     }
 

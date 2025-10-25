@@ -29,7 +29,7 @@ impl Pipeline {
     pub fn new() -> Self {
         let mut icp_config = Config::default_values();
         icp_config.deskew = false;
-        icp_config.max_points_per_voxel = 100;
+        icp_config.max_points_per_voxel = 200;
         icp_config.voxel_size = 0.2;
         let icp = IcpPipeline::new_with_config(icp_config);
         let (handle, rx) = Self::create_realsense_publisher().unwrap();
